@@ -1,61 +1,131 @@
-# Static Content challenge
+# Acme Co. Content Site
 
-**NB: Please do not fork this repository, to avoid your solution being visible from this repository's GitHub page. Please clone this repository and submit your solution as a separate repository.**
+A markdown-driven content site for Acme Co.'s marketing team. URLs map directly
+to folders in `src/content/`, so the marketing team can publish new pages by
+adding a folder with an `index.md` file &mdash; no code changes required.
 
-Business Scenario: Acme Co's marketing department want a simple content management system and you've been tasked with building the MVP.
+For example, `src/content/about-page/index.md` is served at `/about-page`, and
+`src/content/blog/june/company-update/index.md` is served at
+`/blog/june/company-update`.
 
-The challenge here is to create a full-stack JavaScript application that returns webpages at URLs that match the paths of the folders and sub-folders in the `content` folder. The content of these pages should come from a combination of the template HTML file and a markdown file containing the content.
+## Features
 
-For example, for a folder called `about-page`, a request to `/about-page` would return a HTML page created from the `template.html` template and the `about-page/index.md` content file. The `template.html` file contains a `{{content}}` placeholder that would be replaced by the content for each page. A request to `/blog/june/company-update` would return a HTML page using the content file at `blog/june/company-update/index.md`.
+- **Folder-based content** &mdash; add a folder under `src/content/` with an
+  `index.md`, push, and the page appears at the matching URL after the next
+  deploy. The catch-all route renders on demand, so no per-page code or static
+  generation is required.
+- **Home page** &mdash; ships with a default branded landing page that lists
+  every available page. Each entry shows the page's title (first markdown `#`
+  heading) when one is present, and falls back to the folder path when it
+  isn't. Marketing can override the landing page entirely by adding
+  `src/content/index.md`, which is then served as the home page instead.
+- **Titles when available** &mdash; a page's display title is taken from its
+  first markdown H1 heading, falling back to the slug path so untitled pages
+  still render and link sensibly.
+- **Optional frontmatter** &mdash; an optional `---` YAML-style frontmatter
+  block is validated and stripped before rendering. Malformed frontmatter is
+  treated as a content error and surfaces a 500 page (see below).
+- **404 and 500 handling** &mdash; unknown URLs render a friendly 404 page;
+  content that exists but cannot be parsed (e.g. broken frontmatter) renders a
+  500 error page via the route's error boundary, instead of leaking a stack
+  trace.
+- **Responsive design** &mdash; the layout adapts to mobile and desktop
+  viewports.
+- **Safe by default** &mdash; slug resolution guards against path traversal, so
+  a crafted URL cannot read files outside `src/content/`.
 
-As a modern full-stack JavaScript app MVP, the application should use an effective mix of technologies, although there is a requirement to use React on the front-end to fit in with Acme Co's other websites.
+## Why Next.js
 
-Acme's marketing department should be able to add extra folders to the `content` folder and the application should work with those without any requiring any code changes.
-
-This repository contains a `template.html` template file and a sample `content` folder with sub-folders containing `index.md` markdown files (or other sub-folders).
-
-Your application may make use of open-source code libraries and other third-party tools. It is entirely up to you how the application performs the challenge. As the use of LLMs is widespread in software engineering, you are permitted to use AI as you wish.
-
-## Testing
-
-The application should be shipped with at minimum three tests, although your testing strategy should effectively test your application:
-
-- one that verifies that requests to valid URLs return a 200 HTTP status code
-- one that verifies that requests to valid URLs return a body that contains the HTML generated from the relevant `index.md` markdown file
-- one that verifies that requests to URLs that do not match content folders return a 404 HTTP status code
-- NB: the tests should not depend on the existing sub-folders in the `content` folder, so the tests do not break as the content changes
-
-## Bonus credit
-
-**NB: This is only relevant if completing this task in your own time, i.e. NOT in a pairing interview**
-
-In this MVP sprint, there are several opportunities to deliver nice-to-have tickets. The marketing team recognise that in a post-LLM world sprint velocity may be higher.
-
-- The generated HTML page should be styled in a pleasing way
-- The MVP's GitHub repository should be configured for hosting on a cloud hosting service, and include a link to a live deployment
-- The repository should include documentation describing how to both use the application and how to iterate it from here
-- Overall, you should do everything you think is necessary to make this application MVP production-ready
+- **React on the front end** to match Acme's other websites, as required.
+- A single **catch-all route** (`/[...slug]`) maps any URL depth onto the
+  content folder tree, so arbitrary nesting works with no per-page wiring.
+- **Server-side rendering on demand** (`force-dynamic`) &mdash; pages are
+  rendered at request time from the content on disk, so no per-page routes or
+  static generation are needed. New content still requires a deploy to reach
+  production (the markdown files are part of the deployment), but marketing can
+  add folders without any application code changes.
+- Built-in conventions for **error/`not-found` boundaries, metadata, and image
+  optimization** keep the MVP small while staying production-grade.
+- **First-class Vercel deployment** gives us a zero-config hosting target with
+  a clean CI/CD story.
 
 ## Local development
 
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm test           # build + boot a production server, then run the test suite
+npm run lint       # ESLint (Next.js core-web-vitals + TypeScript rules)
+npm test           # build, boot a production server, then run the suite
 ```
 
-Add content by creating a folder under `src/content/` with an `index.md`
-file. The URL mirrors the folder path (e.g. `src/content/blog/june/index.md`
-is served at `/blog/june`). No code change is required.
+To add a page, create a folder under `src/content/` with an `index.md` file.
+The URL mirrors the folder path (e.g. `src/content/blog/june/index.md` is
+served at `/blog/june`). Locally, add the folder and refresh &mdash; no server
+restart or code changes needed. In production, push to `main` and the gated
+CI/CD pipeline deploys the new content.
+
+## Testing
+
+Tests live in `tests/` and run with [Vitest](https://vitest.dev/).
+
+- **Unit tests** (`tests/content.test.ts`) cover the content library: slug
+  resolution, frontmatter stripping, title extraction, and page listing.
+- **Integration tests** (`tests/readme.test.ts`) boot a real production server
+  against a temporary fixture content directory and assert that:
+  - valid URLs return **200**,
+  - the response body contains the HTML generated from the relevant
+    `index.md`,
+  - unknown URLs return **404**,
+  - content that exists but cannot be parsed returns **500**.
+
+The integration tests use their own temp fixtures (`CONTENT_DIR` is overridden
+in `tests/global-setup.ts`), so they are **independent of the real
+`src/content/` folders** and won't break as marketing changes content.
+
+Because `npm test` performs a full `next build` and boots `next start` before
+exercising the suite, it also validates that the app builds, type-checks, and
+serves correctly.
+
+## Linting
+
+ESLint is configured via a flat config (`eslint.config.mjs`) using Next.js's
+`core-web-vitals` and `typescript` rule sets. Run it locally with
+`npm run lint`. It also runs in CI as part of the `test` job, so a lint failure
+blocks the deploy.
+
+## CI/CD
+
+`.github/workflows/ci.yml` defines a **test-gated deployment pipeline**:
+
+- **`test`** runs on every push to `main` and every pull request. It lints,
+  then runs the full suite (which includes the production build).
+- **`deploy`** runs only for pushes to `main`, and only after `test` succeeds
+  (`needs: test`). It builds and deploys to production via the Vercel CLI.
+
+This means **tests run automatically on every push to `main`, and a deploy only
+happens if those tests pass**. The marketing team can push new content freely,
+but a broken change blocks the deploy &mdash; production is only updated when
+nothing is broken. Pull requests are tested but not deployed.
 
 ## Deployment (Vercel)
 
-The app deploys to Vercel through a **test-gated pipeline**: on every push to
-`main`, GitHub Actions runs the full test suite first and only deploys to
-production if it passes. Vercel's native auto-deploy on `main` is disabled (see
-`vercel.json`) so deployments happen exclusively through this gated workflow.
+The app deploys to Vercel through the gated GitHub Actions pipeline above.
+Vercel's native auto-deploy on `main` is disabled (see `vercel.json`) so
+deployments happen exclusively through the test-gated workflow.
 
-**Live deployment:** _<add your Vercel URL here once connected>_
+### Getting the live URL
+
+Each successful deploy publishes its URL in the **`Deploy to Vercel
+(production)`** job of the GitHub Actions run. Open the latest run on the
+`main` branch, expand the **`Deploy prebuilt artifacts to Vercel`** step, and
+use the **Production** URL it prints (for example,
+`https://<project>-<hash>-<org>.vercel.app`).
+
+> The deploy also "aliases" a stable-looking project URL, but on the free tier
+> that alias still belongs to a Vercel-generated domain. A **custom static
+> domain** (a fixed, branded URL that never changes between deploys) could be
+> configured in the Vercel project settings, but that requires a paid plan, so
+> for now the URL is read from the action output as described above.
 
 ### One-time setup
 
@@ -65,39 +135,38 @@ production if it passes. Vercel's native auto-deploy on `main` is disabled (see
    npm install --global vercel
    vercel link          # creates .vercel/project.json
    ```
-3. Read the project/org IDs from `.vercel/project.json` and create a
-   [Vercel access token](https://vercel.com/account/tokens), then add three
-   repository secrets in GitHub (**Settings → Secrets and variables → Actions**):
-   - `VERCEL_TOKEN` — the access token
-   - `VERCEL_ORG_ID` — `orgId` from `.vercel/project.json`
-   - `VERCEL_PROJECT_ID` — `projectId` from `.vercel/project.json`
+3. Add three repository secrets in GitHub
+   (**Settings &rarr; Secrets and variables &rarr; Actions**):
+   - `VERCEL_TOKEN` &mdash; a [Vercel access token](https://vercel.com/account/tokens)
+   - `VERCEL_ORG_ID` &mdash; `orgId` from `.vercel/project.json`
+   - `VERCEL_PROJECT_ID` &mdash; `projectId` from `.vercel/project.json`
 
-From then on, the `deploy` job in `.github/workflows/ci.yml` builds and ships
-to production via the Vercel CLI, but only after the `test` job succeeds.
+From then on, every push to `main` runs the gated pipeline and deploys to
+production when tests pass.
 
-### How content is served in production
+## Project structure
 
-The content routes read `src/content/**/index.md` at request time using
-**dynamic** file paths, which Next.js's output file tracing cannot detect
-statically. Without help, those markdown files would not be bundled into the
-serverless functions and every content page would 404 in production.
+```
+src/
+  app/
+    layout.tsx          # shared header/footer + site metadata
+    page.tsx            # home page (default landing or content/index.md)
+    [...slug]/page.tsx  # catch-all content route
+    not-found.tsx       # 404 page
+    error.tsx           # 500 / error boundary
+    globals.css         # styles (responsive)
+  content/              # marketing-owned markdown content
+  lib/
+    content.ts          # slug resolution, frontmatter, title extraction
+tests/                  # unit + integration tests
+eslint.config.mjs       # ESLint flat config (Next.js rules)
+```
 
-`next.config.ts` fixes this via `outputFileTracingIncludes`, which forces the
-markdown files into the function bundles for the `/` and `/[...slug]` routes.
-Because the content lives in the repo, adding or editing a page is a normal
-git push, which both ships the new content and triggers the redeploy.
+## Iterating from here
 
-### CI/CD pipeline
-
-`.github/workflows/ci.yml` defines two jobs:
-
-- **`test`** — runs on every push to `main` and every pull request. It runs
-  `npm test`, which produces a production build and boots `next start` before
-  exercising the suite, so it validates the build, type-checks, and runtime
-  behaviour together.
-- **`deploy`** — runs only for pushes to `main`, and only after `test`
-  succeeds (`needs: test`). It builds and deploys to production via the Vercel
-  CLI. Because deploys depend on the test job, a failing test blocks the
-  deployment.
-
-Pull requests run the `test` job only — they are validated but not deployed.
+- Add richer frontmatter (e.g. SEO description, social image) and wire it into
+  per-page `generateMetadata`.
+- Add a sitemap and per-page `<title>` derived from the markdown heading.
+- Introduce caching/ISR if content volume grows and on-demand rendering becomes
+  a bottleneck.
+- Configure a custom domain once a paid Vercel plan is available.

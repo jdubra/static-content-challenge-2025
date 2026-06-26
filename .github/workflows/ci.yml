@@ -24,16 +24,19 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
         env:
           NODE_ENV: development
-        run: npm ci --include=dev --no-audit --no-fund
+        run: npm ci --include=dev --no-audit --no-fund --maxsockets=1000
 
       - name: Verify test runner is installed
         run: test -x node_modules/.bin/vitest
+
+      - name: Lint
+        run: npm run lint
 
       # The test suite produces a production build and boots `next start`,
       # so this step also validates that the app builds and serves correctly.
@@ -56,7 +59,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install Vercel CLI
