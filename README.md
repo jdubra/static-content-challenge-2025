@@ -35,3 +35,69 @@ In this MVP sprint, there are several opportunities to deliver nice-to-have tick
 - The MVP's GitHub repository should be configured for hosting on a cloud hosting service, and include a link to a live deployment
 - The repository should include documentation describing how to both use the application and how to iterate it from here
 - Overall, you should do everything you think is necessary to make this application MVP production-ready
+
+## Local development
+
+```bash
+npm install
+npm run dev        # http://localhost:3000
+npm test           # build + boot a production server, then run the test suite
+```
+
+Add content by creating a folder under `src/content/` with an `index.md`
+file. The URL mirrors the folder path (e.g. `src/content/blog/june/index.md`
+is served at `/blog/june`). No code change is required.
+
+## Deployment (Vercel)
+
+The app deploys to Vercel through a **test-gated pipeline**: on every push to
+`main`, GitHub Actions runs the full test suite first and only deploys to
+production if it passes. Vercel's native auto-deploy on `main` is disabled (see
+`vercel.json`) so deployments happen exclusively through this gated workflow.
+
+**Live deployment:** _<add your Vercel URL here once connected>_
+
+### One-time setup
+
+1. Push this repository to GitHub.
+2. Create the Vercel project and link it locally:
+   ```bash
+   npm install --global vercel
+   vercel link          # creates .vercel/project.json
+   ```
+3. Read the project/org IDs from `.vercel/project.json` and create a
+   [Vercel access token](https://vercel.com/account/tokens), then add three
+   repository secrets in GitHub (**Settings → Secrets and variables → Actions**):
+   - `VERCEL_TOKEN` — the access token
+   - `VERCEL_ORG_ID` — `orgId` from `.vercel/project.json`
+   - `VERCEL_PROJECT_ID` — `projectId` from `.vercel/project.json`
+
+From then on, the `deploy` job in `.github/workflows/ci.yml` builds and ships
+to production via the Vercel CLI, but only after the `test` job succeeds.
+
+### How content is served in production
+
+The content routes read `src/content/**/index.md` at request time using
+**dynamic** file paths, which Next.js's output file tracing cannot detect
+statically. Without help, those markdown files would not be bundled into the
+serverless functions and every content page would 404 in production.
+
+`next.config.ts` fixes this via `outputFileTracingIncludes`, which forces the
+markdown files into the function bundles for the `/` and `/[...slug]` routes.
+Because the content lives in the repo, adding or editing a page is a normal
+git push, which both ships the new content and triggers the redeploy.
+
+### CI/CD pipeline
+
+`.github/workflows/ci.yml` defines two jobs:
+
+- **`test`** — runs on every push to `main` and every pull request. It runs
+  `npm test`, which produces a production build and boots `next start` before
+  exercising the suite, so it validates the build, type-checks, and runtime
+  behaviour together.
+- **`deploy`** — runs only for pushes to `main`, and only after `test`
+  succeeds (`needs: test`). It builds and deploys to production via the Vercel
+  CLI. Because deploys depend on the test job, a failing test blocks the
+  deployment.
+
+Pull requests run the `test` job only — they are validated but not deployed.
